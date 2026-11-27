@@ -100,7 +100,7 @@
     else fallback();
   }
 
-  /* ---------- hero: resume, year ---------- */
+  /* ---------- hero: resume, counts, year ---------- */
   $('#resume').addEventListener('click', function () {
     if (D.resume && has(D.resume.url)) window.open(D.resume.url, '_blank', 'noopener');
     else toast('Resume file coming soon.');
@@ -200,7 +200,22 @@
     if (e.key === 'ArrowRight') { e.preventDefault(); stepLightbox(1); }
   });
 
-  /* ---------- certificates ---------- */
+  /* ---------- certificates and achievements ---------- */
+  // Pictures with role 'activity' belong to the detail panel (events, projects, screenshots).
+  // Everything else is a picture of the certificate itself.
+  function certPics(it) { return usable(it.images).filter(function (i) { return i.role !== 'activity'; }); }
+  function activityPics(it) { return usable(it.images).filter(function (i) { return i.role === 'activity'; }); }
+  function certById(id) {
+    var all = (D.achievements || []).concat(D.training || []);
+    for (var i = 0; i < all.length; i++) if (all[i].id === id && !all[i].hidden) return all[i];
+    return null;
+  }
+  function certKind(it) { return (D.achievements || []).indexOf(it) > -1 ? 'achievement' : 'training'; }
+  function certHasDetail(it) {
+    return certPics(it).length > 0 || activityPics(it).length > 0 || has(it.story) || (has(it.related) && !!projectById(it.related));
+  }
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
   function renderCerts(selector, items) {
     var box = $(selector);
     var list = (items || []).filter(function (it) { return !it.hidden; });
@@ -211,18 +226,23 @@
       return;
     }
     list.forEach(function (it) {
-      var shots = usable(it.images);
+      var shots = certPics(it);
+      var acts = activityPics(it);
+      var rich = certHasDetail(it);
       var thumb = null;
+      var open = function (e) { requestCertOpen(it.id, e && e.currentTarget); };
       if (!it.images || !it.images.length) {
         thumb = null; // no copy of the certificate: show the row without a picture box
-      } else if (shots.length) {
+      } else if (shots.length || acts.length) {
+        var cover = shots[0] || acts[0];
+        var extra = shots.length + acts.length - 1;
         thumb = h('button', {
           class: 'thumb', type: 'button',
-          'aria-label': 'View certificate: ' + it.title,
-          onclick: function () { openLightbox(shots, 0); }
+          'aria-label': 'Open details: ' + it.title,
+          onclick: open
         }, [
           h('img', {
-            src: shots[0].src, alt: '', loading: 'lazy',
+            src: cover.src, alt: '', loading: 'lazy',
             onerror: function (e) {
               var btn = e.target.parentNode;
               btn.classList.add('is-broken');
@@ -231,18 +251,30 @@
               btn.appendChild(h('span', { text: 'Not found' }));
             }
           }),
-          shots.length > 1 ? h('span', { class: 'thumb-count', text: '+' + (shots.length - 1) }) : null
+          extra > 0 ? h('span', { class: 'thumb-count', text: '+' + extra }) : null
         ]);
       } else {
         thumb = h('div', { class: 'thumb is-pending', role: 'img', 'aria-label': 'Certificate image coming soon' }, [
           icon('image'), h('span', { text: 'Coming soon' })
         ]);
       }
-      box.appendChild(h('li', null, [
-        h('div', { class: 'row-main' }, [
-          h('strong', { text: it.title }),
-          h('span', { class: 'meta', text: it.meta })
-        ]),
+      var mainKids = [
+        h('strong', { text: it.title }),
+        h('span', { class: 'meta', text: it.meta })
+      ];
+      var cta = null;
+      if (rich) {
+        var bits = [];
+        if (acts.length) bits.push(plural(acts.length, 'photo', 'photos'));
+        cta = h('span', { class: 'row-cta' }, [ (bits.length ? bits.join(' · ') + ' · ' : '') + 'View details', icon('arrow') ]);
+      }
+      var main = rich
+        ? h('div', { class: 'row-main' }, [
+            h('button', { class: 'row-open', type: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Open details: ' + it.title, onclick: open }, mainKids.concat([ cta ]))
+          ])
+        : h('div', { class: 'row-main' }, mainKids);
+      box.appendChild(h('li', { class: rich ? 'is-link' : null }, [
+        main,
         h('div', { class: 'row-side' }, [ h('span', { class: 'when', text: it.year }), thumb ])
       ]));
     });
@@ -259,7 +291,8 @@
       ]));
     });
   }
-    /* ---------- projects: categories, cards ---------- */
+
+  /* ---------- projects: categories, cards ---------- */
   var cats = [{ id: 'all', label: 'All' }].concat(D.projectCategories || []);
   var activeCat = 'all';
 
@@ -372,30 +405,23 @@
     buildTabs($('#gallery-tabs'), gCats, activeGal, 'gtab-', 'gallery-panel',
       function (id) { return galItems(id).length; }, setGallery);
   }
-  function renderGalleryGrid() {
-    var grid = $('#gallery-grid');
-    grid.textContent = '';
-    var list = galItems(activeGal);
-    if (!list.length) {
-      grid.classList.add('is-empty');
-      grid.appendChild(h('li', { class: 'empty' }, [
-        icon('image'),
-        h('strong', { text: 'Nothing in ' + galLabel(activeGal).toLowerCase() + ' yet' }),
-        h('span', { text: 'New work will be added here.' })
-      ]));
-      return;
-    }
-    grid.classList.remove('is-empty');
-    var real = list.filter(function (it) { return has(it.src); }).map(function (it) {
+  // The "All" tab shows only a few pieces per category so the page stays short;
+  // each category has a "View more work" button that opens its own tab.
+  var GAL_FEATURED = 3;
+
+  // Adds one card per piece to a list. Clicking a card opens the viewer on that piece.
+  function galCards(list, ul) {
+    var real = list.filter(function (it) { return has(it.src); });
+    var set = real.map(function (it) {
       return { src: it.src, caption: it.title + (has(it.caption) ? ' — ' + it.caption : '') };
     });
     list.forEach(function (it) {
       if (has(it.src)) {
-        var idx = list.filter(function (x) { return has(x.src); }).indexOf(it);
-        grid.appendChild(h('li', null, [
+        var idx = real.indexOf(it);
+        ul.appendChild(h('li', null, [
           h('button', {
             class: 'g-item', type: 'button', 'aria-label': 'View larger: ' + it.title,
-            onclick: function () { openLightbox(real, idx); }
+            onclick: function () { openLightbox(set, idx); }
           }, [
             h('img', {
               src: it.src, alt: it.title, loading: 'lazy',
@@ -414,7 +440,7 @@
           ])
         ]));
       } else {
-        grid.appendChild(h('li', null, [
+        ul.appendChild(h('li', null, [
           h('div', {
             class: 'g-item is-pending', style: 'aspect-ratio:' + (it.ratio || '4 / 3'),
             role: 'img', 'aria-label': it.title + ' coming soon'
@@ -423,12 +449,122 @@
       }
     });
   }
+
+  // pieces with a picture come first, so "coming soon" cards do not take the featured spots
+  function featuredOf(list) {
+    var withPic = list.filter(function (it) { return has(it.src); });
+    var without = list.filter(function (it) { return !has(it.src); });
+    return withPic.concat(without).slice(0, GAL_FEATURED);
+  }
+
+  function renderGalleryGrid() {
+    var grid = $('#gallery-grid');
+    var groups = $('#gallery-groups');
+    if (!groups) {
+      // index.html is an older copy without the "All" groups box: create it here so nothing breaks
+      groups = h('div', { class: 'g-groups', id: 'gallery-groups', hidden: true });
+      grid.parentNode.insertBefore(groups, grid);
+    }
+    grid.textContent = '';
+    groups.textContent = '';
+    var list = galItems(activeGal);
+    var realCats = gCats.slice(1);
+    var grouped = activeGal === 'all' && realCats.length > 1;
+
+    groups.hidden = !(grouped && list.length);
+    grid.hidden = grouped && list.length > 0;
+
+    if (!list.length) {
+      grid.classList.add('is-empty');
+      grid.appendChild(h('li', { class: 'empty' }, [
+        icon('image'),
+        h('strong', { text: 'Nothing in ' + galLabel(activeGal).toLowerCase() + ' yet' }),
+        h('span', { text: 'New work will be added here.' })
+      ]));
+      return;
+    }
+    grid.classList.remove('is-empty');
+
+    if (!grouped) { galCards(list, grid); return; }
+
+    realCats.forEach(function (c) {
+      var items = galItems(c.id);
+      if (!items.length) return;
+      var ul = h('ul', { class: 'gallery-grid' });
+      galCards(featuredOf(items), ul);
+      var more = items.length - GAL_FEATURED;
+      var openCategory = function () {
+        setGallery(c.id);
+        var t = document.getElementById('gtab-' + c.id);
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        $('#gallery-tabs').scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+        if (t) t.focus({ preventScroll: true });
+      };
+      // last slide on phones: leads to the rest of the category
+      if (more > 0) {
+        ul.appendChild(h('li', { class: 'g-end' }, [
+          h('button', { class: 'g-endcard', type: 'button', onclick: openCategory, 'aria-label': 'View more ' + c.label.toLowerCase() + ' work, ' + items.length + ' pieces in total' }, [
+            icon('arrow'), h('strong', { text: 'View more work' }), h('span', { text: more + (more === 1 ? ' more piece' : ' more pieces') })
+          ])
+        ]));
+      }
+      var prev = h('button', { class: 'g-arrow prev', type: 'button', 'aria-label': 'Previous ' + c.label.toLowerCase() + ' piece' }, [ icon('chev-left') ]);
+      var next = h('button', { class: 'g-arrow next', type: 'button', 'aria-label': 'Next ' + c.label.toLowerCase() + ' piece' }, [ icon('chev-right') ]);
+      var dots = h('div', { class: 'g-dots', 'aria-hidden': 'true' });
+      groups.appendChild(h('section', { class: 'g-group', 'aria-label': c.label }, [
+        h('div', { class: 'g-head' }, [
+          h('h3', null, [ c.label, h('span', { class: 'count', text: String(items.length) }) ]),
+          more > 0 ? h('button', {
+            class: 'g-more', type: 'button',
+            'aria-label': 'View more ' + c.label.toLowerCase() + ' work, ' + items.length + ' pieces in total',
+            onclick: openCategory
+          }, [ 'View more work', icon('arrow') ]) : null
+        ]),
+        h('div', { class: 'g-rail' }, [ ul, prev, next ]),
+        dots
+      ]));
+      wireRail(ul, prev, next, dots);
+    });
+  }
+
+  // On phones the featured pieces form a swipeable row. Arrows and dots follow the scroll position.
+  function wireRail(ul, prev, next, dots) {
+    var slides = ul.children;
+    for (var i = 0; i < slides.length; i++) dots.appendChild(h('span', { class: 'dot' }));
+    function index() {
+      var best = 0, bestD = Infinity, mid = ul.scrollLeft + ul.clientWidth / 2;
+      for (var i = 0; i < slides.length; i++) {
+        var d = Math.abs(slides[i].offsetLeft + slides[i].offsetWidth / 2 - mid);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      return best;
+    }
+    function update() {
+      var i = index();
+      for (var k = 0; k < dots.children.length; k++) dots.children[k].classList.toggle('on', k === i);
+      prev.disabled = ul.scrollLeft <= 2;
+      next.disabled = ul.scrollLeft + ul.clientWidth >= ul.scrollWidth - 2;
+    }
+    function go(d) {
+      var i = Math.max(0, Math.min(slides.length - 1, index() + d));
+      var el = slides[i];
+      var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      ul.scrollTo({ left: el.offsetLeft - (ul.clientWidth - el.offsetWidth) / 2, behavior: reduce ? 'auto' : 'smooth' });
+    }
+    prev.addEventListener('click', function () { go(-1); });
+    next.addEventListener('click', function () { go(1); });
+    ul.addEventListener('scroll', function () { window.requestAnimationFrame(update); }, { passive: true });
+    window.addEventListener('resize', update);
+    update();
+  }
   function setGallery(id) {
     activeGal = id;
     renderGalleryTabs();
     renderGalleryGrid();
     var n = galItems(id).length;
-    $('#gallery-status').textContent = 'Showing ' + n + ' ' + (id === 'all' ? '' : galLabel(id).toLowerCase() + ' ') + (n === 1 ? 'piece' : 'pieces');
+    $('#gallery-status').textContent = id === 'all' && gCats.length > 2
+      ? 'Showing featured work from each category, ' + n + (n === 1 ? ' piece' : ' pieces') + ' in total'
+      : 'Showing ' + n + ' ' + (id === 'all' ? '' : galLabel(id).toLowerCase() + ' ') + (n === 1 ? 'piece' : 'pieces');
   }
   tabKeys($('#gallery-tabs'), gCats, function () { return activeGal; }, 'gtab-', setGallery);
 
@@ -558,11 +694,16 @@
   }
   function syncFromHash() {
     var m = /^#project-([a-z0-9-]+)$/i.exec(location.hash);
+    var a = /^#achievement-([a-z0-9-]+)$/i.exec(location.hash);
     if (m && projectById(m[1])) {
+      if (cd.open) cd.close();
       if (!pd.open || currentId !== m[1]) showProject(m[1]);
+    } else if (a && certById(a[1])) {
+      if (!cd.open || certId !== a[1]) showCert(a[1]);
     } else {
       if (lb.open) lb.close();
       if (pd.open) pd.close();
+      if (cd.open) cd.close();
     }
   }
   $('#pd-close').addEventListener('click', closeProject);
@@ -575,6 +716,130 @@
     lastOpener = null;
   });
   window.addEventListener('hashchange', syncFromHash);
+
+  /* ---------- achievement details dialog ---------- */
+  if (!$('#cert-dialog')) {
+    // index.html is an older copy without the details dialog: build it here
+    document.body.appendChild(h('dialog', { id: 'cert-dialog', class: 'sheet', 'aria-labelledby': 'cd-title' }, [
+      h('div', { class: 'sheet-bar' }, [
+        h('p', { class: 'sheet-kicker', id: 'cd-kicker' }),
+        h('div', { class: 'sheet-nav' }, [
+          h('button', { type: 'button', class: 'icon-btn', id: 'cd-prev', 'aria-label': 'Previous entry' }, [ icon('chev-left') ]),
+          h('button', { type: 'button', class: 'icon-btn', id: 'cd-next', 'aria-label': 'Next entry' }, [ icon('chev-right') ]),
+          h('button', { type: 'button', class: 'icon-btn', id: 'cd-close', 'aria-label': 'Close details', autofocus: true }, [ icon('close') ])
+        ])
+      ]),
+      h('div', { class: 'sheet-body', id: 'cd-body' })
+    ]));
+  }
+  var cd = $('#cert-dialog');
+  var cdBody = $('#cd-body');
+  var cdKicker = $('#cd-kicker');
+  var cdPrev = $('#cd-prev');
+  var cdNext = $('#cd-next');
+  var certId = null;
+  var certByNav = false;
+  var certOpener = null;
+
+  function photoGrid(set, label, withCaptions) {
+    var wrap = h('div', { class: 'gallery moments' });
+    set.forEach(function (s, idx) {
+      var fig = h('figure', { class: 'moment' }, [
+        h('button', {
+          class: 'shot', type: 'button', 'aria-label': 'View larger: ' + (s.caption || label),
+          onclick: function () { openLightbox(set, idx); }
+        }, [
+          h('img', {
+            src: s.src, alt: s.caption || '', loading: 'lazy',
+            onerror: function (e) {
+              var btn = e.target.parentNode;
+              btn.classList.add('is-pending');
+              e.target.remove();
+              btn.appendChild(icon('image'));
+              btn.appendChild(h('span', { text: 'Image not found' }));
+            }
+          })
+        ]),
+        withCaptions && has(s.caption) ? h('figcaption', { text: s.caption }) : null
+      ]);
+      wrap.appendChild(fig);
+    });
+    return wrap;
+  }
+
+  function certSiblings(it) {
+    var pool = certKind(it) === 'achievement' ? (D.achievements || []) : (D.training || []);
+    var same = pool.filter(function (x) { return !x.hidden && certHasDetail(x); });
+    return same.length ? same : [it];
+  }
+  function stepCert(d) {
+    var it = certById(certId);
+    if (!it) return;
+    var ids = certSiblings(it).map(function (x) { return x.id; });
+    var i = ids.indexOf(certId);
+    location.replace('#achievement-' + ids[(i + d + ids.length) % ids.length]);
+  }
+  cdPrev.addEventListener('click', function () { stepCert(-1); });
+  cdNext.addEventListener('click', function () { stepCert(1); });
+
+  function showCert(id) {
+    var it = certById(id);
+    if (!it) return;
+    if (pd.open) pd.close();
+    certId = id;
+    cdKicker.textContent = certKind(it) === 'achievement' ? 'Achievement' : 'Certification and training';
+    cdBody.textContent = '';
+    var certs = certPics(it);
+    var acts = activityPics(it);
+    var rel = has(it.related) ? projectById(it.related) : null;
+    [
+      h('h2', { id: 'cd-title', class: 'pd-title', text: it.title }),
+      h('div', { class: 'pd-meta' }, [
+        has(it.meta) ? h('span', { class: 'tag', text: it.meta }) : null,
+        has(it.year) ? h('span', { class: 'when', text: it.year }) : null
+      ]),
+      has(it.story) ? h('p', { class: 'pd-sum story', text: it.story }) : null,
+      rel ? h('div', { class: 'btn-row' }, [
+        h('button', {
+          class: 'btn solid', type: 'button',
+          onclick: function () {
+            var opener = certOpener;
+            cd.close();
+            requestOpen(rel.id, opener);
+          }
+        }, [ 'Related project: ' + rel.title, icon('arrow') ])
+      ]) : null,
+      acts.length ? section('Activities and highlights', photoGrid(acts, it.title, true)) : null,
+      certs.length ? section(certs.length > 1 ? 'Certificates' : 'Certificate', photoGrid(certs, it.title, false)) : null
+    ].forEach(function (n) { if (n) cdBody.appendChild(n); });
+    cdBody.scrollTop = 0;
+    var multi = certSiblings(it).length > 1;
+    cdPrev.hidden = !multi;
+    cdNext.hidden = !multi;
+    if (!cd.open) cd.showModal();
+  }
+
+  function requestCertOpen(id, opener) {
+    certOpener = opener || null;
+    certByNav = true;
+    location.hash = 'achievement-' + id;
+  }
+  function closeCert() {
+    if (/^#achievement-/.test(location.hash)) {
+      if (certByNav) { history.back(); return; }
+      history.replaceState(null, '', location.pathname + location.search + '#achievements');
+    }
+    if (cd.open) cd.close();
+  }
+  $('#cd-close').addEventListener('click', closeCert);
+  cd.addEventListener('cancel', function (e) { e.preventDefault(); closeCert(); });
+  cd.addEventListener('click', function (e) { if (e.target === cd) closeCert(); });
+  cd.addEventListener('close', function () {
+    certId = null;
+    certByNav = false;
+    if (certOpener && document.body.contains(certOpener)) certOpener.focus();
+    certOpener = null;
+  });
 
   /* ---------- socials ---------- */
   function renderSocials() {

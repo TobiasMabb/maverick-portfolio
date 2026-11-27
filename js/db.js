@@ -49,7 +49,11 @@
   }
 
   function imgs(list) {
-    return (Array.isArray(list) ? list : []).map(function (i) { return { src: i.src || '', caption: i.caption || '' }; });
+    return (Array.isArray(list) ? list : []).map(function (i) {
+      var o = { src: i.src || '', caption: i.caption || '' };
+      if (i.role) o.role = i.role;
+      return o;
+    });
   }
   function toSite(rows) {
     return {
@@ -63,7 +67,7 @@
         };
       }),
       certificates: rows.certificates.map(function (r) {
-        return { id: r.id, kind: r.kind, title: r.title, meta: r.meta || '', year: r.year || '', images: imgs(r.images) };
+        return { id: r.id, kind: r.kind, title: r.title, meta: r.meta || '', year: r.year || '', images: imgs(r.images), story: r.story || '', related: r.related || '' };
       }),
       gallery: rows.gallery.map(function (r) {
         return { id: r.id, category: r.category, title: r.title, caption: r.caption || '', src: r.src || '', ratio: r.ratio || '4 / 3' };

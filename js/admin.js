@@ -133,6 +133,7 @@
     if (/JWT expired|invalid JWT/i.test(m)) return 'Your sign-in expired. Please sign in again.';
     if (/mime type|not supported|not allowed/i.test(m)) return 'That file type is not allowed. Use JPG, PNG, WebP, GIF, PDF, Word, PowerPoint, Excel or ZIP.';
     if (/maximum allowed size|too large|payload/i.test(m)) return 'That file is too big. The limit is 20 MB.';
+    if (/(story|related)/i.test(m) && /column|schema cache/i.test(m)) return 'The database needs one small update first. Run sql/4-achievement-details.sql in the Supabase SQL Editor, then try again.';
     if (/duplicate key/i.test(m)) return 'An item with that name already exists. Change the title slightly.';
     return m;
   }
@@ -290,6 +291,7 @@
   function imageList(ctx, o) {
     var items = (o.items || []).map(function (i) { return { src: i.src || '', path: i.path || '', caption: i.caption || '' }; });
     var box = h('div', { class: 'rep' });
+    var capHint = o.captionHint || 'Caption';
 
     function addFiles(files, at) {
       files.forEach(function (file, n) {
@@ -321,7 +323,7 @@
         var mid = h('div', { class: 'field' });
         if (!o.noCaption) {
           mid.appendChild(h('input', {
-            class: 'inp', type: 'text', value: it.caption, placeholder: 'Caption', 'aria-label': 'Caption for picture ' + (i + 1),
+            class: 'inp', type: 'text', value: it.caption, placeholder: capHint, 'aria-label': 'Caption for picture ' + (i + 1),
             oninput: function (e) { it.caption = e.target.value; }
           }));
         }
@@ -360,6 +362,7 @@
         return items.filter(function (i) { return !i.uploading; }).map(function (i) {
           var r = { src: i.src, caption: i.caption.trim() };
           if (i.path) r.path = i.path;
+          if (o.role) r.role = o.role;
           return r;
         });
       }
@@ -441,7 +444,7 @@
   function openEditor(ctx, cfg) {
     var dlg = h('dialog', { class: 'ed', 'aria-labelledby': 'ed-title' });
     var form = h('form', { novalidate: true });
-        var msg = h('span', { class: 'msg', role: 'status' });
+    var msg = h('span', { class: 'msg', role: 'status' });
     var saveBtn = h('button', { class: 'a-btn primary', type: 'submit', text: 'Save' });
     ctx.setBusy = function (n) {
       ctx.busy += n;
@@ -571,16 +574,26 @@
   /* ---------- certificate editor ---------- */
   function editCertificate(existing, defaultKind) {
     var isNew = !existing;
-    var r = existing ? clone(existing) : { id: '', kind: defaultKind || 'training', title: '', meta: '', year: String(new Date().getFullYear()), images: [{ src: '', caption: '' }], published: true };
+    var r = existing ? clone(existing) : { id: '', kind: defaultKind || 'training', title: '', meta: '', year: String(new Date().getFullYear()), images: [{ src: '', caption: '' }], story: '', related: '', published: true };
     var ctx = newCtx();
-    var mode0 = !r.images.length ? 'none' : (r.images.some(function (i) { return has(i.src); }) ? 'have' : 'soon');
+    var certImgs = r.images.filter(function (i) { return i.role !== 'activity'; });
+    var actImgs = r.images.filter(function (i) { return i.role === 'activity' && has(i.src); });
+    var hasExtras = !state.data.certificates.length || ('story' in state.data.certificates[0]);
+    var mode0 = !certImgs.length ? 'none' : (certImgs.some(function (i) { return has(i.src); }) ? 'have' : 'soon');
     var kind = select(CERT_KINDS, r.kind);
     var title = inp(r.title, { placeholder: 'e.g. Sui Builders Program, Palawan', maxlength: 160 });
     var meta = inp(r.meta, { placeholder: 'Organizer or place, e.g. DICT MIMAROPA', maxlength: 160 });
     var year = inp(r.year, { maxlength: 12 });
     var mode = select([['have', 'I have a picture or e-certificate'], ['soon', 'I will add it later (show "Coming soon")'], ['none', 'I do not have a copy (show the entry only)']], mode0);
-    var pics = imageList(ctx, { items: r.images.filter(function (i) { return has(i.src); }), folder: function () { return 'certificates/' + (slug(title.value) || 'new'); }, defaultCaption: function () { return title.value.trim() ? 'Certificate, ' + title.value.trim() : ''; } });
+    var pics = imageList(ctx, { items: certImgs.filter(function (i) { return has(i.src); }), folder: function () { return 'certificates/' + (slug(title.value) || 'new'); }, defaultCaption: function () { return title.value.trim() ? 'Certificate, ' + title.value.trim() : ''; } });
     var picsField = field('Certificate pictures', pics.el, 'Add more than one for front and back or several pages.', true);
+    var acts = imageList(ctx, { role: 'activity', items: actImgs, captionHint: 'What is in this photo? e.g. Our team at the demo day', folder: function () { return 'certificates/' + (slug(title.value) || 'new') + '/activity'; }, defaultCaption: function () { return ''; } });
+    var fActs = field('Photos and screenshots of the activity', acts.el, 'Events, the project you built, team photos, screenshots. They open when a visitor selects this entry on the site.', true);
+    var story = area(r.story || '', { placeholder: 'A few sentences about what happened, what you did and what you learned. Optional.', maxlength: 1500, rows: 5 });
+    var fStory = field('Story', story, 'Optional. Shown at the top of the details panel.');
+    var relOpts = [['', 'None']].concat(state.data.projects.map(function (p) { return [p.id, p.title]; }));
+    var related = select(relOpts, r.related || '');
+    var fRel = field('Related project', related, 'Optional. Adds a button that opens that project.');
     var pub = switchBox('Show on the website', r.published);
     var fTitle = field('Title', title, '', false, true), fYear = field('Year', year, '', false, true), fMeta = field('Details line', meta), fMode = field('Certificate copy', mode, 'Switching away from "I have a picture" deletes the uploaded pictures when you save.');
     function sync() { picsField.hidden = mode.value !== 'have'; }
@@ -590,7 +603,9 @@
     openEditor(ctx, {
       title: isNew ? 'Add a certificate or achievement' : 'Edit entry',
       done: isNew ? 'Entry added' : 'Entry saved',
-      body: [field('Type', kind), fTitle, fMeta, fYear, fMode, picsField, pub],
+      body: [field('Type', kind), fTitle, fMeta, fYear, fMode, picsField, fActs]
+        .concat(hasExtras ? [fStory, fRel] : [h('p', { class: 'hint-line', text: 'To add a story and a related project, run sql/4-achievement-details.sql once in the Supabase SQL Editor. Photos work without it.' })])
+        .concat([pub]),
       validate: function () {
         var ok = requireText(fTitle, title, 'Enter a title.');
         ok = requireText(fYear, year, 'Enter a year.') && ok;
@@ -604,7 +619,9 @@
         var images = [];
         if (mode.value === 'have') images = pics.get().filter(function (i) { return has(i.src); });
         else if (mode.value === 'soon') images = [{ src: '', caption: title.value.trim() ? 'Certificate, ' + title.value.trim() : '' }];
+        images = images.concat(acts.get().filter(function (i) { return has(i.src); }));
         var rec = { kind: kind.value, title: title.value.trim(), meta: meta.value.trim(), year: year.value.trim(), images: images, published: pub.input.checked };
+        if (hasExtras) { rec.story = story.value.trim(); rec.related = related.value; }
         if (isNew) {
           rec.id = uniqueId(slug(title.value) || 'certificate', state.data.certificates.map(function (c) { return c.id; }));
           rec.sort = nextSort('certificates');
@@ -773,7 +790,8 @@
       }
     });
   }
-    /* ---------- data ---------- */
+
+  /* ---------- data ---------- */
   function loadTable(k) {
     return sb.from(TABLE[k]).select('*').order('sort', { ascending: true }).order('created_at', { ascending: true }).then(function (r) {
       if (r.error) throw r.error;
@@ -1185,7 +1203,8 @@
       h('div', { class: 'add-row' }, [btn('Download backup', 'primary', exportBackup, 'upload'), btn('Restore from a file', '', restoreBackup)])
     ]));
   }
-      /* ---------- screens ---------- */
+
+  /* ---------- screens ---------- */
   function setScreen(nodes) { app.textContent = ''; nodes.forEach(function (n) { app.appendChild(n); }); }
 
   function renderSetupNeeded() {

@@ -153,7 +153,18 @@
   </div>
   <div class="sheet-body" id="pd-body"></div>
 </dialog>
-
+<!-- Achievement and certificate details -->
+<dialog id="cert-dialog" class="sheet" aria-labelledby="cd-title">
+  <div class="sheet-bar">
+    <p class="sheet-kicker" id="cd-kicker"></p>
+    <div class="sheet-nav">
+      <button type="button" class="icon-btn" id="cd-prev" aria-label="Previous entry" data-icon="chev-left"></button>
+      <button type="button" class="icon-btn" id="cd-next" aria-label="Next entry" data-icon="chev-right"></button>
+      <button type="button" class="icon-btn" id="cd-close" aria-label="Close details" data-icon="close" autofocus></button>
+    </div>
+  </div>
+  <div class="sheet-body" id="cd-body"></div>
+</dialog>
 <!-- Image viewer for certificates and screenshots -->
 <dialog id="lightbox" class="lightbox" aria-label="Image viewer">
   <button type="button" class="icon-btn lb-close" id="lb-close" aria-label="Close image viewer" data-icon="close"></button>
