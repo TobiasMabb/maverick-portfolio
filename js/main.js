@@ -141,7 +141,7 @@
       box.appendChild(h('article', { class: 'job' }, [
         h('div', { class: 'job-head' }, [
           h('div', null, [
-            h('strong', { text: j.role }),
+            h('strong', { class: 'role', text: j.role }),
             h('span', { class: 'org', text: j.company }),
             has(j.place) ? h('span', { class: 'meta', text: j.place }) : null
           ]),
@@ -450,11 +450,11 @@
     });
   }
 
-  // pieces with a picture come first, so "coming soon" cards do not take the featured spots
-  function featuredOf(list) {
+  // pieces with a picture come first, so "coming soon" cards do not take the top spots
+  function picturesFirst(list) {
     var withPic = list.filter(function (it) { return has(it.src); });
     var without = list.filter(function (it) { return !has(it.src); });
-    return withPic.concat(without).slice(0, GAL_FEATURED);
+    return withPic.concat(without);
   }
 
   function renderGalleryGrid() {
@@ -488,28 +488,13 @@
     if (!grouped) { galCards(list, grid); return; }
 
     realCats.forEach(function (c) {
-      var items = galItems(c.id);
+      var items = picturesFirst(galItems(c.id));
       if (!items.length) return;
       var ul = h('ul', { class: 'gallery-grid' });
-      galCards(featuredOf(items), ul);
+      galCards(items, ul);
+      // computers show the first few pieces; phones swipe through every piece
+      Array.prototype.forEach.call(ul.children, function (li, i) { if (i >= GAL_FEATURED) li.classList.add('g-extra'); });
       var more = items.length - GAL_FEATURED;
-      var openCategory = function () {
-        setGallery(c.id);
-        var t = document.getElementById('gtab-' + c.id);
-        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        $('#gallery-tabs').scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
-        if (t) t.focus({ preventScroll: true });
-      };
-      // last slide on phones: leads to the rest of the category
-      if (more > 0) {
-        ul.appendChild(h('li', { class: 'g-end' }, [
-          h('button', { class: 'g-endcard', type: 'button', onclick: openCategory, 'aria-label': 'View more ' + c.label.toLowerCase() + ' work, ' + items.length + ' pieces in total' }, [
-            icon('arrow'), h('strong', { text: 'View more work' }), h('span', { text: more + (more === 1 ? ' more piece' : ' more pieces') })
-          ])
-        ]));
-      }
-      var prev = h('button', { class: 'g-arrow prev', type: 'button', 'aria-label': 'Previous ' + c.label.toLowerCase() + ' piece' }, [ icon('chev-left') ]);
-      var next = h('button', { class: 'g-arrow next', type: 'button', 'aria-label': 'Next ' + c.label.toLowerCase() + ' piece' }, [ icon('chev-right') ]);
       var dots = h('div', { class: 'g-dots', 'aria-hidden': 'true' });
       groups.appendChild(h('section', { class: 'g-group', 'aria-label': c.label }, [
         h('div', { class: 'g-head' }, [
@@ -517,42 +502,40 @@
           more > 0 ? h('button', {
             class: 'g-more', type: 'button',
             'aria-label': 'View more ' + c.label.toLowerCase() + ' work, ' + items.length + ' pieces in total',
-            onclick: openCategory
+            onclick: function () {
+              setGallery(c.id);
+              var t = document.getElementById('gtab-' + c.id);
+              var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+              $('#gallery-tabs').scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+              if (t) t.focus({ preventScroll: true });
+            }
           }, [ 'View more work', icon('arrow') ]) : null
         ]),
-        h('div', { class: 'g-rail' }, [ ul, prev, next ]),
+        h('div', { class: 'g-rail' }, [ ul ]),
         dots
       ]));
-      wireRail(ul, prev, next, dots);
+      wireRail(ul, dots);
     });
   }
 
-  // On phones the featured pieces form a swipeable row. Arrows and dots follow the scroll position.
-  function wireRail(ul, prev, next, dots) {
+  // On phones each category is a swipeable row, with small dots underneath showing where you are.
+  function wireRail(ul, dots) {
     var slides = ul.children;
-    for (var i = 0; i < slides.length; i++) dots.appendChild(h('span', { class: 'dot' }));
+    var n = slides.length;
+    var count = Math.min(n, 7); // a long row still gets a short, tidy set of dots
+    for (var i = 0; i < count; i++) dots.appendChild(h('span', { class: 'dot' }));
     function index() {
       var best = 0, bestD = Infinity, mid = ul.scrollLeft + ul.clientWidth / 2;
-      for (var i = 0; i < slides.length; i++) {
+      for (var i = 0; i < n; i++) {
         var d = Math.abs(slides[i].offsetLeft + slides[i].offsetWidth / 2 - mid);
         if (d < bestD) { bestD = d; best = i; }
       }
       return best;
     }
     function update() {
-      var i = index();
-      for (var k = 0; k < dots.children.length; k++) dots.children[k].classList.toggle('on', k === i);
-      prev.disabled = ul.scrollLeft <= 2;
-      next.disabled = ul.scrollLeft + ul.clientWidth >= ul.scrollWidth - 2;
+      var on = n < 2 ? 0 : Math.round(index() * (count - 1) / (n - 1));
+      for (var k = 0; k < dots.children.length; k++) dots.children[k].classList.toggle('on', k === on);
     }
-    function go(d) {
-      var i = Math.max(0, Math.min(slides.length - 1, index() + d));
-      var el = slides[i];
-      var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      ul.scrollTo({ left: el.offsetLeft - (ul.clientWidth - el.offsetWidth) / 2, behavior: reduce ? 'auto' : 'smooth' });
-    }
-    prev.addEventListener('click', function () { go(-1); });
-    next.addEventListener('click', function () { go(1); });
     ul.addEventListener('scroll', function () { window.requestAnimationFrame(update); }, { passive: true });
     window.addEventListener('resize', update);
     update();
@@ -875,24 +858,76 @@
     });
   }
 
-  /* ---------- highlight the section being read in the nav ---------- */
+  /* ---------- nav: a bubble that follows the section you are reading ---------- */
   function initScrollSpy() {
-    if (!('IntersectionObserver' in window)) return;
+    var nav = $('.nav');
+    if (!nav) return;
     var links = {};
     $$('.nav a[href^="#"]').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
     links.hero = links.top;
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (en) {
-        if (!en.isIntersecting) return;
-        Object.keys(links).forEach(function (k) { if (links[k]) links[k].removeAttribute('aria-current'); });
-        var a = links[en.target.id];
-        if (a) a.setAttribute('aria-current', 'true');
+    var ids = ['hero', 'about', 'skills', 'achievements', 'projects', 'gallery', 'socials'];
+
+    var bubble = h('span', { class: 'nav-bubble', 'aria-hidden': 'true' });
+    nav.insertBefore(bubble, nav.firstChild);
+    var current = null;
+    var lockUntil = 0;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // put the bubble behind the active link, and slide the bar so that link stays in view
+    function place(id, instant) {
+      var a = links[id];
+      if (!a) return;
+      Object.keys(links).forEach(function (k) { if (links[k]) links[k].removeAttribute('aria-current'); });
+      a.setAttribute('aria-current', 'true');
+      var chip = a.classList.contains('chip');
+      bubble.style.opacity = chip ? '0' : '1';
+      if (instant) bubble.style.transition = 'none';
+      bubble.style.width = a.offsetWidth + 'px';
+      bubble.style.height = a.offsetHeight + 'px';
+      bubble.style.transform = 'translate(' + a.offsetLeft + 'px,' + a.offsetTop + 'px)';
+      if (instant) { void bubble.offsetWidth; bubble.style.transition = ''; }
+      if (nav.scrollWidth > nav.clientWidth + 2) {
+        var left = a.offsetLeft - (nav.clientWidth - a.offsetWidth) / 2;
+        nav.scrollTo({ left: Math.max(0, left), behavior: instant || reduce ? 'auto' : 'smooth' });
+      }
+    }
+
+    // the section whose top has passed a line a little above the middle of the screen
+    function whichSection() {
+      var probe = window.innerHeight * 0.38, found = 'hero';
+      ids.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= probe) found = id;
       });
-    }, { rootMargin: '-35% 0px -60% 0px' });
-    ['hero', 'about', 'achievements', 'skills', 'projects', 'gallery', 'socials'].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) io.observe(el);
+      var doc = document.documentElement;
+      if (window.innerHeight + window.pageYOffset >= doc.scrollHeight - 4) found = 'socials';
+      return found;
+    }
+    function update(force) {
+      if (!force && performance.now() < lockUntil) return;
+      var id = whichSection();
+      if (id !== current || force) { current = id; place(id, force === 'instant'); }
+    }
+
+    var ticking = false;
+    window.addEventListener('scroll', function () {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(function () { ticking = false; update(); });
+    }, { passive: true });
+    window.addEventListener('resize', function () { update(true); });
+    // tapping a link moves the bubble straight there instead of sliding through every section on the way
+    nav.addEventListener('click', function (e) {
+      var a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      if (!a) return;
+      var id = a.getAttribute('href').slice(1);
+      if (id === 'top') id = 'hero';
+      current = id; place(id);
+      lockUntil = performance.now() + 900;
+      setTimeout(function () { update(); }, 950);
     });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { update(true); });
+    update('instant');
   }
 
   /* ---------- start ---------- */

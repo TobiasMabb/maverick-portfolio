@@ -387,6 +387,72 @@
     return { el: box, get: function () { return items.filter(function (i) { return has(i.label); }).map(function (i) { return { label: i.label.trim(), url: i.url.trim() }; }); } };
   }
 
+  // A list of bullet points: one box per point, with add, remove and reorder.
+  // Enter starts a new point, Backspace in an empty point removes it, pasting several lines splits them into points.
+  function bulletList(ctx, list) {
+    var items = (list || []).map(function (t) { return { text: String(t || '') }; });
+    if (!items.length) items.push({ text: '' });
+    var box = h('div', { class: 'rep' });
+    var focusAt = -1;
+
+    function grow(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight + 2, 240) + 'px'; }
+    function render() {
+      box.textContent = '';
+      items.forEach(function (it, i) {
+        var ta = h('textarea', {
+          class: 'txt bul-in', rows: 1, maxlength: 400, placeholder: i === 0 ? 'e.g. Coached members through workouts based on their goals' : 'Another thing you did',
+          'aria-label': 'Bullet point ' + (i + 1),
+          oninput: function (e) { it.text = e.target.value; ctx.dirty = true; grow(e.target); },
+          onkeydown: function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              items.splice(i + 1, 0, { text: '' }); focusAt = i + 1; ctx.dirty = true; render();
+            } else if (e.key === 'Backspace' && !e.target.value && items.length > 1) {
+              e.preventDefault();
+              items.splice(i, 1); focusAt = Math.max(0, i - 1); ctx.dirty = true; render();
+            }
+          },
+          onpaste: function (e) {
+            var t = (e.clipboardData && e.clipboardData.getData('text')) || '';
+            var lines = t.split(/\r?\n/).map(function (x) { return x.replace(/^\s*[-*\u2022]\s*/, '').trim(); }).filter(Boolean);
+            if (lines.length < 2) return;
+            e.preventDefault();
+            var args = [i, 1].concat(lines.map(function (x, n) { return { text: n === 0 && has(it.text) ? it.text.trim() + ' ' + x : x }; }));
+            items.splice.apply(items, args); focusAt = i + lines.length - 1; ctx.dirty = true; render();
+          }
+        }, [it.text]);
+        function move(d) { var t = items[i]; items[i] = items[i + d]; items[i + d] = t; focusAt = -1; ctx.dirty = true; render(); }
+        box.appendChild(h('div', { class: 'rep-row bul' }, [
+          h('span', { class: 'bul-dot', 'aria-hidden': 'true', text: '•' }),
+          ta,
+          h('div', { class: 'mini' }, [
+            ibtn('up', 'Move up', function () { move(-1); }, i === 0),
+            ibtn('down', 'Move down', function () { move(1); }, i === items.length - 1),
+            ibtn('trash', 'Remove this bullet point', function () {
+              items.splice(i, 1); if (!items.length) items.push({ text: '' });
+              focusAt = -1; ctx.dirty = true; render();
+            })
+          ])
+        ]));
+      });
+      box.appendChild(h('div', { class: 'add-row' }, [
+        btn('Add bullet point', '', function () { items.push({ text: '' }); focusAt = items.length - 1; ctx.dirty = true; render(); }, 'plus')
+      ]));
+      Array.prototype.forEach.call(box.querySelectorAll('textarea'), grow);
+      if (focusAt >= 0 && box.isConnected) {
+        var t = box.querySelectorAll('textarea')[focusAt];
+        if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
+      }
+      focusAt = -1;
+    }
+    render();
+    return {
+      el: box,
+      get: function () { return items.map(function (i) { return i.text.replace(/\s+/g, ' ').trim(); }).filter(Boolean); },
+      refit: function () { Array.prototype.forEach.call(box.querySelectorAll('textarea'), grow); }
+    };
+  }
+
   function docList(ctx, list, folderFn) {
     var items = (list || []).map(function (d) { return { label: d.label || '', type: d.type || 'PDF', url: d.url || '', path: d.path || '' }; });
     var box = h('div', { class: 'rep' });
@@ -496,6 +562,7 @@
     dlg.appendChild(form);
     document.body.appendChild(dlg);
     dlg.showModal();
+    if (cfg.opened) cfg.opened();
   }
 
   function requireText(fieldEl, input, message) {
@@ -674,21 +741,22 @@
     var r = existing ? clone(existing) : { id: '', role: '', company: '', place: '', period_start: String(new Date().getFullYear()), period_end: 'Present', bullets: [], published: true };
     var ctx = newCtx();
     var role = inp(r.role, { placeholder: 'e.g. Gym Attendant / Fitness Coach', maxlength: 140 });
+    var bulletsEd = bulletList(ctx, r.bullets);
     var company = inp(r.company, { placeholder: 'e.g. Island Punch Fitness', maxlength: 140 });
     var place = inp(r.place, { placeholder: 'Town or address (optional)', maxlength: 200 });
     var start = inp(r.period_start, { placeholder: '2024', maxlength: 20 });
     var end = inp(r.period_end, { placeholder: 'Present', maxlength: 20 });
-    var bullets = area((r.bullets || []).join('\n'), { rows: 6, placeholder: 'One line per bullet point' });
     var pub = switchBox('Show on the website', r.published);
-    var fRole = field('Job title', role, '', false, true), fCompany = field('Company', company, '', false, true), fPlace = field('Place', place),
+    var fRole = field('Role / position', role, 'Your job title. It is the main heading of this job on the site.', false, true), fCompany = field('Company', company, '', false, true), fPlace = field('Place', place),
       fStart = field('Started', start, '', false, true), fEnd = field('Ended', end, 'Type "Present" if you still work there.', false, true),
-      fBul = field('What you did', bullets, 'Write each bullet point on its own line.');
+      fBul = field('What you did', bulletsEd.el, 'One bullet point per thing you did. Press Enter for a new point. Pasting a list splits it into points.', true);
     openEditor(ctx, {
       title: isNew ? 'Add work experience' : 'Edit work experience',
       done: isNew ? 'Experience added' : 'Experience saved',
       body: [fRole, fCompany, fPlace, h('div', { class: 'row2' }, [fStart, fEnd]), fBul, pub],
+      opened: function () { bulletsEd.refit(); },
       validate: function () {
-        var ok = requireText(fRole, role, 'Enter your job title.');
+        var ok = requireText(fRole, role, 'Enter your role or position.');
         ok = requireText(fCompany, company, 'Enter the company.') && ok;
         ok = requireText(fStart, start, 'Enter when you started.') && ok;
         ok = requireText(fEnd, end, 'Enter when it ended, or "Present".') && ok;
@@ -698,7 +766,7 @@
         var rec = {
           role: role.value.trim(), company: company.value.trim(), place: place.value.trim(),
           period_start: start.value.trim(), period_end: end.value.trim(),
-          bullets: bullets.value.split('\n').map(function (x) { return x.trim(); }).filter(Boolean),
+          bullets: bulletsEd.get(),
           published: pub.input.checked
         };
         if (isNew) {

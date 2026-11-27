@@ -469,9 +469,9 @@ a.doc:hover { background: var(--glass-hi); }
 .g-more:active { transform: scale(.97); }
 .g-more:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 .g-rail { position: relative; }
-.g-arrow, .g-dots, .g-end { display: none; }
+.g-dots { display: none; }
 
-/* phones: each category is a box you swipe through, with arrows at both sides */
+/* phones: each category is one row you swipe through, with dots underneath */
 @media (max-width: 640px) {
   .g-groups { gap: 34px; }
   .g-head h3 { font-size: 20px; }
@@ -484,31 +484,13 @@ a.doc:hover { background: var(--glass-hi); }
   .g-rail .gallery-grid > li { flex: 0 0 100%; margin: 0; scroll-snap-align: center; scroll-snap-stop: always; min-width: 0; }
   .g-rail .g-item { border-radius: 22px; }
   .g-rail .g-item img { max-height: 70vh; object-fit: contain; background: var(--glass); }
-  .g-arrow {
-    display: grid; place-items: center; position: absolute; top: 50%; z-index: 2; width: 42px; height: 42px; margin-top: -21px; padding: 0;
-    border: 0; border-radius: 50%; cursor: pointer; background: var(--seg-on); color: var(--fg);
-    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: var(--pill-shadow);
-    transition: opacity .25s, transform .25s var(--ease);
-  }
-  .g-arrow .ico { width: 20px; height: 20px; }
-  .g-arrow.prev { left: 8px; }
-  .g-arrow.next { right: 8px; }
-  .g-arrow:disabled { opacity: 0; pointer-events: none; }
-  .g-arrow:active { transform: scale(.92); }
-  .g-arrow:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
   .g-dots { display: flex; justify-content: center; gap: 7px; margin-top: 4px; }
   .g-dots .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); transition: background .25s, width .25s var(--ease); }
   .g-dots .dot.on { width: 20px; border-radius: 999px; background: var(--fg); }
-  .g-end { display: block; }
-  .g-endcard {
-    display: grid; place-content: center; justify-items: center; gap: 8px; width: 100%; min-height: 240px; padding: 24px; cursor: pointer;
-    border: 0; border-radius: 22px; color: var(--fg); font: inherit; text-align: center;
-    background: var(--glass); box-shadow: inset 0 0 0 1.5px var(--line);
-  }
-  .g-endcard .ico { width: 26px; height: 26px; }
-  .g-endcard strong { font-size: 18px; font-weight: 600; }
-  .g-endcard span { font-size: 14px; color: var(--muted); }
-  .g-endcard:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+}
+/* computers: only the first few pieces of each category on the All tab */
+@media (min-width: 641px) {
+  .g-groups .g-extra { display: none; }
 }
 
 /* socials */
@@ -594,4 +576,98 @@ a, button, summary, [role="tab"], label.switch { touch-action: manipulation; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   * { transition: none !important; animation: none !important; }
+}
+
+/* =====================================================================
+   Text and spacing polish: justified paragraphs, one spacing scale,
+   and shared left and right edges for everything inside a section.
+   ===================================================================== */
+:root {
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px; --sp-7: 48px; --sp-8: 72px;
+}
+
+/* Justified paragraphs. Hyphenation keeps the word gaps even, and the last line stays left aligned. */
+.lead, .hint, .id .intro, .bullets li, .pd-sum, .pd-empty, .moment figcaption {
+  text-align: justify; text-justify: inter-word;
+  -webkit-hyphens: auto; hyphens: auto;
+  overflow-wrap: break-word; text-wrap: pretty;
+}
+/* paragraphs in a section run the full width, so their right edge lines up with the cards and dividers */
+.sec-body > p, .lead, .pd-sum { max-width: none; }
+.lead { line-height: 1.6; -webkit-hyphens: manual; hyphens: manual; } /* large text: no word breaks on computers */
+.sec-body > .hint { font-size: 16.5px; line-height: 1.65; }
+.bullets { line-height: 1.65; }
+.card-sum { line-height: 1.6; text-align: left; } /* cut off after 3 lines, so a justified last visible line would be stretched */
+
+/* One vertical rhythm inside every section */
+.sec-body { gap: var(--sp-5); }
+.sec-body h3 { margin: var(--sp-4) 0 0; }
+.skills .group h3 { margin: 0; }
+.rows li, .job { padding-block: var(--sp-5); }
+.rows li:first-child, .job:first-child { padding-top: 0; }
+.rows li > div, .job-head > div { gap: var(--sp-1); }
+.job { gap: var(--sp-3); }
+.bullets { gap: var(--sp-2); }
+.chips { gap: var(--sp-2); }
+.card { gap: var(--sp-3); }
+.card-cta { padding-top: var(--sp-2); }
+.sheet-body { gap: var(--sp-5); }
+.pd-sec { gap: var(--sp-3); padding-top: var(--sp-5); }
+
+/* Dates line up with the first line of their title */
+.when { padding-top: 3px; line-height: 1.5; }
+.certs .when { padding-top: 0; }
+
+@media (max-width: 900px) {
+  main section { row-gap: var(--sp-5); padding-block: var(--sp-8); }
+}
+@media (max-width: 640px) {
+  /* education rows: the date sits under the details, like the work experience rows */
+  .rows:not(.certs) li { flex-direction: column; gap: var(--sp-2); }
+  .rows:not(.certs) .when { padding-top: 0; }
+  .lead { font-size: 19px; line-height: 1.58; -webkit-hyphens: auto; hyphens: auto; }
+  .bullets { padding-left: 20px; }
+  .g-head { margin-bottom: var(--sp-3); }
+}
+
+/* =====================================================================
+   Navigation bubble: one pill that slides behind the section you are in
+   ===================================================================== */
+.nav { position: relative; }
+.nav a { position: relative; z-index: 1; }
+.nav-bubble {
+  position: absolute; left: 0; top: 0; z-index: 0; width: 0; height: 0; border-radius: 999px; pointer-events: none;
+  background: var(--seg-on); box-shadow: var(--shadow-sm);
+  transition: transform .42s var(--ease), width .42s var(--ease), height .42s var(--ease), opacity .25s;
+}
+.nav a[aria-current="true"]:not(.chip) { background: transparent; box-shadow: none; }
+.nav a[aria-current="true"] { color: var(--fg); }
+@media (prefers-reduced-motion: reduce) { .nav-bubble { transition: none; } }
+
+/* =====================================================================
+   Work experience: larger, and set on its own cards so it stands out
+   ===================================================================== */
+.jobs { gap: var(--sp-4); }
+.jobs .job {
+  gap: var(--sp-5); padding: var(--sp-6) 34px; border: 0; border-radius: 30px;
+  background: var(--glass); box-shadow: var(--pill-shadow);
+  -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px);
+}
+.jobs .job:first-child { padding-top: var(--sp-6); }
+.job-head { align-items: flex-start; }
+.job-head > div { gap: 6px; }
+.job .role { font-size: clamp(24px, 2.6vw, 30px); font-weight: 700; letter-spacing: -.025em; line-height: 1.15; text-wrap: balance; }
+.job .org { font-size: 19px; font-weight: 500; }
+.job .meta { font-size: 16.5px; }
+.job .when {
+  padding: 7px 14px; border-radius: 999px; background: var(--pill-bg); color: var(--fg);
+  font-size: 14.5px; font-weight: 600; line-height: 1.2;
+}
+.job .bullets { font-size: 18px; line-height: 1.65; gap: var(--sp-3); padding-left: 24px; }
+@media (max-width: 640px) {
+  .jobs .job { padding: var(--sp-5) 22px; border-radius: 26px; }
+  .job .role { font-size: 24px; }
+  .job .org { font-size: 18px; }
+  .job .when { align-self: flex-start; }
+  .job .bullets { font-size: 17px; padding-left: 20px; }
 }
