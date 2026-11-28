@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500;700&display=swap">
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/motion.css">
 </head>
 <body>
 <a class="skip" href="#top">Skip to content</a>
@@ -19,8 +20,8 @@
   <nav class="nav" aria-label="Main">
     <a href="#top">Maverick</a>
     <a href="#about">About</a>
-    <a href="#achievements">Achievements</a>
     <a href="#skills">Skills</a>
+    <a href="#achievements">Achievements</a>
     <a href="#projects">Projects</a>
     <a href="#gallery">Gallery</a>
     <a class="chip" href="#socials">Socials
@@ -37,7 +38,7 @@
   <div class="hero" id="hero">
     <div class="id">
       <p class="eyebrow">Portfolio &middot; Puerto Princesa, Palawan</p>
-      <h1><span class="first">Maverick</span> <span class="rest">Miguel A. Torres</span></h1>
+      <h1><span class="first">Maverick</span><span class="rest">Miguel A. Torres</span></h1>
       <ul class="creds">
         <li>Bachelor of Science in Information Technology</li>
         <li>Google UX Design Professional</li>
@@ -53,7 +54,6 @@
          <img class="portrait" src="images/portrait.png" alt="Portrait of Maverick Miguel A. Torres"> -->
     <div class="orb" aria-hidden="true"></div>
 
-    <!-- filled by main.js from your Socials (email, GitHub, phone) -->
     <ul class="facts" id="contact-strip" aria-label="Contact"></ul>
   </div>
 
@@ -85,20 +85,20 @@
     </div>
   </section>
 
+  <section id="skills" aria-labelledby="h-skills">
+    <h2 id="h-skills">Skills</h2>
+    <div class="sec-body skills" id="skills-list"></div>
+  </section>
+
   <section id="achievements" aria-labelledby="h-achievements">
     <h2 id="h-achievements">Achievements</h2>
     <div class="sec-body">
-      <p class="hint">Select a certificate thumbnail to view it full size.</p>
+      <p class="hint">Select an entry to see the certificate and photos from the activity behind it.</p>
       <h3>Achievements</h3>
       <ul class="rows certs" id="achievement-list"></ul>
       <h3>Certifications and training</h3>
       <ul class="rows certs" id="training-list"></ul>
     </div>
-  </section>
-
-  <section id="skills" aria-labelledby="h-skills">
-    <h2 id="h-skills">Skills</h2>
-    <div class="sec-body skills" id="skills-list"></div>
   </section>
 
   <section id="projects" aria-labelledby="h-projects">
@@ -119,6 +119,7 @@
       <p class="hint">Graphic design work and photography. Select an image to view it larger.</p>
       <div class="tabs" role="tablist" aria-label="Gallery categories" id="gallery-tabs"></div>
       <div id="gallery-panel" role="tabpanel">
+        <div class="g-groups" id="gallery-groups" hidden></div>
         <ul class="gallery-grid" id="gallery-grid"></ul>
       </div>
       <p class="sr-only" id="gallery-status" role="status"></p>
@@ -153,6 +154,7 @@
   </div>
   <div class="sheet-body" id="pd-body"></div>
 </dialog>
+
 <!-- Achievement and certificate details -->
 <dialog id="cert-dialog" class="sheet" aria-labelledby="cd-title">
   <div class="sheet-bar">
@@ -165,6 +167,7 @@
   </div>
   <div class="sheet-body" id="cd-body"></div>
 </dialog>
+
 <!-- Image viewer for certificates and screenshots -->
 <dialog id="lightbox" class="lightbox" aria-label="Image viewer">
   <button type="button" class="icon-btn lb-close" id="lb-close" aria-label="Close image viewer" data-icon="close"></button>
@@ -185,5 +188,7 @@
 <script src="js/db.js"></script>
 <!-- flowing black-and-white liquid background; delete this line to turn it off -->
 <script src="js/liquid.js"></script>
+<!-- motion: hero intro, scroll reveals, pointer effects; delete this line and the motion.css link to turn it off -->
+<script src="js/motion.js"></script>
 </body>
 </html>
